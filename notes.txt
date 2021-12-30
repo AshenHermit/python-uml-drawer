@@ -1,0 +1,17 @@
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+<mxCell id="2" value="WebApiImgsGatherer" style="swimlane;fontStyle=1;align=center;verticalAlign=middle;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;marginBottom=0;rounded=0;shadow=0;strokeWidth=1;fontFamily=Courier New;fillColor=none;" vertex="1" parent="1">
+    <mxGeometry x="130" y="230" width="200" height="128" as="geometry"/>
+</mxCell>
+<mxCell id="3" value="+ api_url" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="2">
+    <mxGeometry y="26" width="200" height="26" as="geometry"/>
+</mxCell>
+<mxCell id="4" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;" vertex="1" parent="2">
+    <mxGeometry y="52" width="200" height="8" as="geometry"/>
+</mxCell>
+<mxCell id="5" value="+ get_images_posts(page)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="2">
+    <mxGeometry y="60" width="200" height="20" as="geometry"/>
+</mxCell>
+<mxCell id="6" value="+ iterate_images()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;" vertex="1" parent="2">
+    <mxGeometry y="80" width="200" height="16" as="geometry"/>
+</mxCell>
