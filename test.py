@@ -28,13 +28,14 @@ def get_child_members(module, root_path:Path=None):
         if inspect.ismodule(member):
             member_file = getattr(member, "__file__", "")
         else:
-            member_module = inspect.getmodule(module)
+            member_module = inspect.getmodule(member)
             member_file = getattr(member_module, "__file__", "")
-        return member_file.find(str(root_path)) != -1
-    members = list(map(is_child_member, members))
+        return Path(member_file).is_relative_to(root_path)
+    members = list(filter(lambda x: is_child_member(x[1]), members))
     return members
 
-package_path = Path("C:/Users/user/Python/python-uml-drawer/diagrams")
+package_path = Path("C:/Users/hermit/Python/python-uml-drawer/diagrams")
 
 module = import_package(package_path)
+get_child_members(module, package_path)
 inspect.getmembers(module)
