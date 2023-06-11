@@ -2,12 +2,16 @@ import importlib
 import importlib.util
 from importlib.machinery import SourceFileLoader
 import inspect
-
+import typing
 from pathlib import Path
+
+from diagrams.parser import DiagramRenderer
+
+CWD = Path(__file__).parent.resolve()
 
 class PackageScanner():
     def __init__(self, package_path:Path) -> None:
-        self.__package_path:Path = Path(package_path)
+        self.__package_path:Path = Path(package_path.resolve())
         self.__init_module = self.import_package()
     
     @property
@@ -29,7 +33,7 @@ class PackageScanner():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
-        return None
+        return None 
 
     @property
     def members(self):
@@ -44,8 +48,12 @@ class PackageScanner():
         members = list(filter(lambda x: is_child_member(x[1]), members))
         return members
 
-scanner = PackageScanner(Path("C:/Users/hermit/Python/python-uml-drawer/diagrams"))
 
-module = import_package(package_path)
-get_child_members(module, package_path)
-inspect.getmembers(module)
+if __name__ == "__main__":
+    members = []
+    members += PackageScanner(CWD/"../module_scanner/").members
+    members += PackageScanner(CWD/"../diagrams/").members
+    members = list(map(lambda x: x[1], members))
+
+    renderer = DiagramRenderer(CWD/"../test_diagram.drawio")
+    renderer.render_members(members)

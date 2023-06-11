@@ -18,3 +18,16 @@ def class_xml(id:str, parent:str, value:str="ClassNode", x:float=0, y:float=0, w
     <mxGeometry x="{x}" y="{y}" width="{width}" height="{height}" as="geometry">
     </mxGeometry>
 </mxCell>"""
+
+def empty_diagram():
+    return f"""
+<mxfile compressed="false">
+    <diagram name="Page-1">
+        <mxGraphModel dx="784" dy="430" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+            <mxCell id="0"/>
+            <mxCell id="1" parent="0"/>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>"""

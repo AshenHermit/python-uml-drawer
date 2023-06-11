@@ -1,12 +1,13 @@
 from os import stat
-from types import ModuleType
+from types import ModuleType, MappingProxyType
 import typing
 from lxml import objectify, etree
 from pathlib import Path
 import inspect
 import diagrams.templates as templates
-
 from diagrams.style import Style
+
+
 
 CWD = Path(__file__).parent.resolve()
 
@@ -20,7 +21,9 @@ class XMLDiagramLookup(etree.PythonElementClassLookup):
             else:
                 return DObject
         if el.tag == "diagram":
-            return
+            return DiagramElement
+        if el.tag == "root":
+            return DObject
         return None
 
 xml_diagram_parser:etree.XMLParser = objectify.makeparser()
@@ -37,11 +40,11 @@ class DObject(CustomElementBase):
     def get_child_objects(self):
         parent:CustomElementBase = self.getparent()
         neighbours = parent.getchildren()
-        neighbours = list(filter(
-            lambda e: 
+        children = list(filter(
+            lambda e:
                 type(e)==DObject and e.parent==self.id, 
             neighbours))
-        return neighbours
+        return children
 
     @property
     def style(self)->Style:
@@ -71,7 +74,7 @@ class DObject(CustomElementBase):
 
     @property
     def geometry_el(self)->etree.ElementBase:
-        return self.find("mxGeometry") or None
+        return self.find("mxGeometry")
         
     @property
     def x(self)->float: return float(self.geometry_el.get("x", "0"))
@@ -79,12 +82,12 @@ class DObject(CustomElementBase):
     def x(self, value:float)->float: self.geometry_el.set("x", str(value))
     
     @property
-    def y(self)->float: return float(self.geometry_el.get("y"), "0")
+    def y(self)->float: return float(self.geometry_el.get("y", "0"))
     @y.setter
     def y(self, value:float)->float: self.geometry_el.set("y", str(value))
 
     @property
-    def width(self)->float: return float(self.geometry_el.get("width"), "1")
+    def width(self)->float: return float(self.geometry_el.get("width", "1"))
     @width.setter
     def width(self, value:float)->float: self.geometry_el.set("width", str(value))
 
@@ -107,19 +110,41 @@ class DClassNode(DObject):
     ROW_HEIGHT = 20.0
     CLASS_HEADER_HEIGHT = 30.0
 
+    def __init__(self, *children, attrib=..., nsmap=..., **_extra) -> None:
+        super().__init__(*children, attrib=attrib, nsmap=nsmap, **_extra)
+        self.ref_class:typing.Type[object] = None
+        self.ref_class_name:str = ""
+
+    def get_all_separator_lines(self):
+        child_objects:list[DObject] = self.get_child_objects()
+        separator_lines = [obj for obj in child_objects if obj.style.shape == "line"]
+        return separator_lines
+    
     def get_separator_line(self, index=0):
-        def get_all_separator_lines():
-            child_objects:list[DObject] = self.get_child_objects()
-            separator_lines = [obj for obj in child_objects if obj.style.shape == "line"]
-            return separator_lines
-        separator_lines = get_all_separator_lines()
-        if len(separator_lines)==0:
-            line_xml = templates.class_separator_line_xml(self.id+"_separator_line", self.id)
+        """creates separator line if not exist"""
+        # create previous separators if index is > count of separators in general
+        for i in range(max(0, index - len(self.get_all_separator_lines()))):
+            self.get_separator_line(i)
+        separator_lines = self.get_all_separator_lines()
+        separator_line = None
+        prev_els = self.get_children_in_section(index)
+
+        if len(separator_lines)==index:
+            line_xml = templates.class_separator_line_xml(f"{self.id}_separator_line_{index}", self.id)
             line_el = etree.fromstring(line_xml, xml_diagram_parser)
             line_el.height = self.SEPARATOR_LINE_HEIGHT
-            return self.addnext(line_el)
+            if len(prev_els)>0:
+                prev_els[-1].addnext(line_el)
+            else:
+                self.addnext(line_el)
+            separator_line = line_el
         else:
-            return separator_lines[min(len(separator_lines), index)]
+            separator_line = separator_lines[min(len(separator_lines), index)]
+        
+        if len(prev_els)>0:
+            prev_el = prev_els[-1]
+            separator_line.y = prev_el.y + prev_el.height
+        return separator_line
 
     def get_children_in_section(self, section=0) -> typing.List[DObject]:
         child_objects:list[DObject] = self.get_child_objects()
@@ -133,24 +158,19 @@ class DClassNode(DObject):
         return children_in_sec
         
     def get_class_fields_and_methods(self, cls:typing.Type[object]):
-        def is_original(member):
-            # TODO: this
-            def get_members_names(cls):
-                return list(map(lambda x: x[0], inspect.getmembers(cls)))
-            inherited_members = get_members_names(inspect.getmro(cls)[1])
-            member_name = member[0]
-            original = not member_name in inherited_members
-            return original
-            
-            # 
-        fields = inspect.getmembers(cls, predicate=lambda x: not inspect.isroutine(x) and is_original(x))
-        methods = inspect.getmembers(cls,predicate=lambda x: inspect.isroutine(x) and is_original(x))
-        def name_filter(name:str):
-            return not name.startswith("__")
-        def filter_members(members:list):
-            return list(filter(lambda x: name_filter(x[0]), members))
-        fields = filter_members(fields)
-        methods = filter_members(methods)
+        def get_members_names(cls):
+            return list(map(lambda x: x[0], inspect.getmembers(cls)))
+        inherited_members = get_members_names(inspect.getmro(cls)[1])
+        def is_original(member_name_value):
+            return member_name_value[0] not in inherited_members
+        def name_filter(member_name_value):
+            return not member_name_value[0].startswith("__")
+        def filter_members(member_name_value):
+            return is_original(member_name_value) and name_filter(member_name_value)
+            #
+        fields = inspect.getmembers(cls, predicate=lambda x: not inspect.isroutine(x))
+        methods = inspect.getmembers(cls,predicate=lambda x: inspect.isroutine(x))
+        fields, methods = tuple([list(filter(filter_members, arr)) for arr in [fields, methods]])
         return fields, methods
     
     def fill_section(self, section=0, row_generator:typing.Callable[[],DObject]=None):
@@ -162,22 +182,28 @@ class DClassNode(DObject):
             after_element = separator_line
         
         for i, row_el in enumerate(row_generator()):
-            if i<len(sec_children):
-                child:DObject = sec_children[i]
-                child.value = row_el.value
-                child.height = row_el.height
-                after_element = child
+            existing_els = [c for c in sec_children if c.value==row_el.value]
+
+            if len(existing_els)>0:
+                el:DObject = existing_els[0]
+                el.value = row_el.value
             else:
-                row_el.id = f"{self.id}_{section}_{i}"
+                if len(sec_children)>0 and after_element:
+                    after_element = sec_children[-1]
+                row_el.y = after_element.y + after_element.height
+                if after_element == self: 
+                    row_el.y = after_element.y+self.CLASS_HEADER_HEIGHT
+                if len(sec_children)>0: after_element = sec_children[-1]
                 row_el.parent = self.id
                 after_element.addnext(row_el)
-                after_element = row_el
         
     def render_class(self, cls:typing.Type[object]):
         """ Fills class swimlane with fields of actual python class, separating line and methods.  
         
             If swimlane already has some rows, they will just be renamed. At the end of rendering height of swimlane updates to `self.compute_height()`
         """
+        self.ref_class = cls
+        self.ref_class_name = cls.__name__
         fields, methods = self.get_class_fields_and_methods(cls)
 
         def members_rows_generator_maker(members):
@@ -193,7 +219,8 @@ class DClassNode(DObject):
 
             def generator():
                 for member in members:
-                    xml = templates.class_row_xml("id", self.id)
+                    id = f"{self.id}_{str(type(member[1]).__name__)}_{member[0]}"
+                    xml = templates.class_row_xml(id, self.id)
                     el:DObject = etree.fromstring(xml, xml_diagram_parser)
                     el.value = member_to_string(member)
                     el.height = self.ROW_HEIGHT
@@ -205,12 +232,38 @@ class DClassNode(DObject):
         self.fill_section(1, row_generator=members_rows_generator_maker(methods))
 
         self.height = self.compute_height()
+        self.arrange_children()
 
     def compute_height(self):
         """ Returns sum of children heights + self.CLASS_HEADER_HEIGHT. """
         height = super().compute_height()
         height += self.CLASS_HEADER_HEIGHT
         return height
+
+    def arrange_children(self):
+        separator_lines = self.get_all_separator_lines()
+        section_els = []
+        for sec in range(len(separator_lines)+1):
+            # arrange separator line
+            if sec>0:
+                if len(section_els)>0:
+                    separator_lines[sec-1].y = section_els[-1].y + section_els[-1].height
+                elif sec==1:
+                    separator_lines[sec-1].y = self.CLASS_HEADER_HEIGHT
+                else:
+                    separator_lines[sec-1].y = separator_lines[sec-2].y + separator_lines[sec-2].height
+
+            # arrange members
+            section_els = self.get_children_in_section(sec)
+            for i,el in enumerate(section_els):
+                if i==0 and sec==0:
+                    el.y = self.CLASS_HEADER_HEIGHT
+                elif i==0:
+                    separator_line = separator_lines[sec-1]
+                    el.y = separator_line.y + separator_line.height
+                else:
+                    prev_el = section_els[i-1]
+                    el.y = prev_el.y + prev_el.height
 
     @staticmethod
     def predict_height_with_class(self, cls):
@@ -254,7 +307,7 @@ class DiagramElement(CustomElementBase):
 
     def render_classes(self, classes:typing.List[typing.Type[object]]):
         def get_class_file(c): return inspect.getmodule(c).__file__
-        classes = list(set(classes))
+        classes = list(classes)
         files = list(set(map(lambda c: get_class_file(c), classes)))
         classes_by_file = {file : [] for file in files}
         for cls in classes:
@@ -264,14 +317,25 @@ class DiagramElement(CustomElementBase):
         classes_objects = self.classes_objects
         for file in classes_by_file.keys():
             next_y = 0
-            next_x = x_index_of_cls*280
+            next_x = files.index(file)*280
+            # pack infile members
+            infile_members = None
+            for member in list(classes_by_file[file]):
+                if type(member).__name__ != "type":
+                    if infile_members is None:
+                        infile_members = type(Path(file).with_suffix("").name+"_module", (object,), {})
+                    setattr(infile_members, member.__name__, member)
+                    classes_by_file[file].remove(member)
+            if infile_members is not None:
+                classes_by_file[file].append(infile_members)
+
             for cls in classes_by_file[file]:
                 cls_objects = self.find_class_objects(cls)
+                cls_obj_ref = None
                 if len(cls_objects)>0:
                     for cls_obj in cls_objects:
                         cls_obj.render_class(cls)
-                        next_y = cls_obj.y+cls_obj.height+20.0
-                        next_x = cls_obj.x
+                        cls_obj_ref = cls_obj
                 else:
                     cls_obj_xml = templates.class_xml(
                         f"{cls.__name__.lower()}_class_node", 
@@ -279,19 +343,32 @@ class DiagramElement(CustomElementBase):
                         cls.__name__,
                         next_x,
                         next_y, )
-                    cls_obj = etree.fromstring(cls_obj, xml_diagram_parser)
+                    cls_obj = etree.fromstring(cls_obj_xml, xml_diagram_parser)
                     self.root_el.append(cls_obj)
                     cls_obj.render_class(cls)
+                    cls_obj_ref = cls_obj
+                
+                if cls_obj_ref is not None:
+                    next_y = cls_obj_ref.y+cls_obj_ref.height+20.0
+                    next_x = cls_obj_ref.x
+
+class DiagramRenderer:
+    def __init__(self, diagram_filepath:Path) -> None:
+        self.diagram_filepath = diagram_filepath
+
+    def render_members(self, members):
+        encoding = 'utf-8'
+        if not self.diagram_filepath.exists():
+            self.diagram_filepath.write_text(templates.empty_diagram(), encoding=encoding)
+        root:etree.ElementBase = objectify.parse(str(self.diagram_filepath), xml_diagram_parser).getroot()
+        objects = root.findall("diagram/mxGraphModel/root/")
+        diagram:DiagramElement = root.find("diagram")
+        diagram.render_classes(members)
+        self.diagram_filepath.write_text(etree.tostring(root, pretty_print=True).decode(encoding), encoding=encoding)
 
 def main():
-    encoding = 'utf-8'
-    diagram_filepath = CWD/"../python_uml_drawer.drawio"
-    root:etree.ElementBase = objectify.parse(str(diagram_filepath), xml_diagram_parser).getroot()
-    objects = root.findall("diagram/mxGraphModel/root/")
-    diagram:DiagramElement = root.find("diagram")
-    diagram.render_classes([DObject, ])
-    diagram_filepath.write_text(etree.tostring(root, pretty_print=True).decode(encoding), encoding=encoding)
-    
+    renderer = DiagramRenderer(CWD/"../python_uml_drawer.drawio")
+    renderer.render_members([DObject, DClassNode, DiagramElement])
 
 if __name__ == '__main__':
     main()
